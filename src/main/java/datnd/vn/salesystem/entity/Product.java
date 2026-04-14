@@ -1,5 +1,6 @@
 package datnd.vn.salesystem.entity;
 
+import datnd.vn.salesystem.constant.enums.ProductUnit;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
@@ -25,11 +26,18 @@ public class Product extends BaseEntity {
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "unit", length = 50, nullable = false)
-    private String unit;
+    private ProductUnit unit;
 
     @Column(name = "price", nullable = false, precision = 15, scale = 2)
     private BigDecimal price;
+
+    @Column(name = "height", precision = 10, scale = 3)
+    private BigDecimal height;
+
+    @Column(name = "width", precision = 10, scale = 3)
+    private BigDecimal width;
 
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;

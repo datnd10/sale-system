@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/test")
-public class TestController {
+public class DBCheckController {
     @GetMapping
     public String test() {
         return "test 123";
@@ -15,7 +15,7 @@ public class TestController {
 
     private final DbHealthCheck dbHealthService;
 
-    public TestController(DbHealthCheck dbHealthService) {
+    public DBCheckController(DbHealthCheck dbHealthService) {
         this.dbHealthService = dbHealthService;
     }
 

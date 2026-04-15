@@ -8,5 +8,6 @@ public class Constants {
         public static final String PRODUCT  = API + "/products";
         public static final String CUSTOMER = API + "/customers";
         public static final String ORDER    = API + "/orders";
+        public static final String DEBT     = API + "/debts";
     }
 }

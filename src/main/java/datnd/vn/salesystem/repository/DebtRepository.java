@@ -21,4 +21,17 @@ public interface DebtRepository extends JpaRepository<Debt, Long> {
      */
     @Query("SELECT d FROM Debt d JOIN FETCH d.customer WHERE d.remainingAmount > 0")
     List<Debt> findAllWithPositiveRemainingAmount();
+
+    /**
+     * Returns aggregated debt per customer: [customerId, customerCode, customerName, totalRemaining].
+     * Only includes customers with total remaining > 0, sorted descending by total.
+     */
+    @Query("""
+            SELECT d.customer.id, d.customer.code, d.customer.name, SUM(d.remainingAmount)
+            FROM Debt d
+            GROUP BY d.customer.id, d.customer.code, d.customer.name
+            HAVING SUM(d.remainingAmount) > 0
+            ORDER BY SUM(d.remainingAmount) DESC
+            """)
+    List<Object[]> findCustomerDebtSummariesDescending();
 }

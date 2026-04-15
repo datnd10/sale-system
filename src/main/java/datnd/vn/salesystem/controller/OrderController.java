@@ -1,0 +1,112 @@
+package datnd.vn.salesystem.controller;
+
+import datnd.vn.salesystem.common.ApiResponse;
+import datnd.vn.salesystem.constant.Constants;
+import datnd.vn.salesystem.dto.request.OrderRequest;
+import datnd.vn.salesystem.dto.request.UpdateNoteRequest;
+import datnd.vn.salesystem.dto.response.OrderDetailResponse;
+import datnd.vn.salesystem.dto.response.OrderResponse;
+import datnd.vn.salesystem.service.OrderService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+import java.util.List;
+
+@Tag(name = "Order", description = "Quản lý đơn hàng")
+@RestController
+@RequestMapping(Constants.URI.ORDER)
+@RequiredArgsConstructor
+public class OrderController {
+
+    private final OrderService orderService;
+
+    @Operation(summary = "Tạo đơn hàng mới",
+            description = "Tạo đơn hàng với danh sách sản phẩm. Tự động tính total_amount và tạo bản ghi Debt.")
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<OrderDetailResponse> createOrder(@Valid @RequestBody OrderRequest request) {
+        List<OrderService.OrderItemRequest> itemRequests = request.getItems().stream()
+                .map(item -> new OrderService.OrderItemRequest(
+                        item.getProductId(),
+                        item.getCount(),
+                        item.getLength(),
+                        item.getWidth(),
+                        item.getHeight()
+                ))
+                .toList();
+
+        OrderService.OrderWithItems result = orderService.createOrder(
+                request.getCustomerId(),
+                request.getOrderDate(),
+                itemRequests,
+                request.getPaidImmediately()
+        );
+
+        return ApiResponse.success(
+                OrderDetailResponse.from(result.order(), result.items()),
+                "Order created successfully"
+        );
+    }
+
+    @Operation(summary = "Lấy danh sách đơn hàng",
+            description = "Trả về danh sách đơn hàng, hỗ trợ lọc theo Customer ID và khoảng thời gian.")
+    @GetMapping
+    public ApiResponse<List<OrderResponse>> getOrders(
+            @Parameter(description = "Lọc theo Customer ID (tùy chọn)")
+            @RequestParam(required = false) Long customerId,
+            @Parameter(description = "Ngày bắt đầu (yyyy-MM-dd, tùy chọn)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @Parameter(description = "Ngày kết thúc (yyyy-MM-dd, tùy chọn)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+
+        List<OrderResponse> orders = orderService.getOrders(customerId, from, to)
+                .stream()
+                .map(OrderResponse::from)
+                .toList();
+
+        return ApiResponse.success(orders, "Orders retrieved successfully");
+    }
+
+    @Operation(summary = "Lấy chi tiết đơn hàng theo ID",
+            description = "Trả về thông tin đơn hàng kèm danh sách OrderItem.")
+    @GetMapping("/{id}")
+    public ApiResponse<OrderDetailResponse> getOrderById(
+            @Parameter(description = "ID đơn hàng") @PathVariable Long id) {
+
+        OrderService.OrderWithItems result = orderService.getOrderById(id);
+        return ApiResponse.success(
+                OrderDetailResponse.from(result.order(), result.items()),
+                "Order retrieved successfully"
+        );
+    }
+
+    @Operation(summary = "Cập nhật ghi chú đơn hàng",
+            description = "Cập nhật trường note của đơn hàng theo ID.")
+    @PatchMapping("/{id}/note")
+    public ApiResponse<OrderResponse> updateOrderNote(
+            @Parameter(description = "ID đơn hàng") @PathVariable Long id,
+            @RequestBody UpdateNoteRequest request) {
+
+        return ApiResponse.success(
+                OrderResponse.from(orderService.updateOrderNote(id, request.getNote())),
+                "Order note updated successfully"
+        );
+    }
+
+    @Operation(summary = "Xóa đơn hàng (soft delete)",
+            description = "Đánh dấu đơn hàng là không hoạt động (active = false).")
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> deleteOrder(
+            @Parameter(description = "ID đơn hàng") @PathVariable Long id) {
+
+        orderService.deleteOrder(id);
+        return ApiResponse.success(null, "Order deleted successfully");
+    }
+}

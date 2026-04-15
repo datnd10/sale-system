@@ -8,7 +8,7 @@ Phạm vi hệ thống:
 - Không có authentication/authorization phức tạp
 - Không quản lý tồn kho
 - Tất cả response theo định dạng JSON thống nhất
-- Soft delete cho Category và Product
+- Soft delete cho Category, Product và Order
 - Mỗi bản ghi có mã hiển thị tự sinh (`code`) dạng `PREFIX + 7 chữ số` để nhận diện ra ngoài
 
 ## Architecture
@@ -187,8 +187,7 @@ CREATE TABLE orders (
     order_date       DATE NOT NULL DEFAULT CURRENT_DATE,
     total_amount     NUMERIC(15,2) NOT NULL,
     paid_immediately NUMERIC(15,2) NOT NULL DEFAULT 0,
-    status           VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-                     -- PENDING | COMPLETED | CANCELLED
+    active           BOOLEAN NOT NULL DEFAULT TRUE,
     note             TEXT,
     created_at       TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at       TIMESTAMP NOT NULL DEFAULT NOW()
@@ -202,6 +201,12 @@ CREATE TABLE order_items (
     id         BIGSERIAL PRIMARY KEY,
     order_id   BIGINT NOT NULL REFERENCES orders(id),
     product_id BIGINT NOT NULL REFERENCES products(id),
+    -- Kích thước gốc (tùy unit của product)
+    length     NUMERIC(10,3),            -- mét dài (MET, M2)
+    width      NUMERIC(10,3),            -- mét rộng (M2)
+    height     NUMERIC(10,3),            -- chiều cao nếu cần
+    count      NUMERIC(15,3) NOT NULL CHECK (count > 0),  -- số lượng tờ/cây/kg/...
+    -- Số lượng quy đổi theo unit: M2 = count×length×width, MET = count×length, còn lại = count
     quantity   NUMERIC(15,3) NOT NULL CHECK (quantity > 0),
     unit_price NUMERIC(15,2) NOT NULL,   -- snapshot tại thời điểm tạo đơn
     subtotal   NUMERIC(15,2) NOT NULL    -- quantity * unit_price
@@ -357,8 +362,10 @@ Khi tạo Payment với số tiền `P` cho Customer:
 
 *For any* order creation request with a list of N order items, the system SHALL:
 1. Store `unit_price` for each item as a snapshot of the product's price at creation time (not affected by future price changes)
-2. Compute `total_amount = Σ (quantity_i × unit_price_i)` for all items
-3. Create a Debt record with `original_amount = total_amount - paid_immediately`
+2. Compute `quantity` per item based on product unit: `M2 → count × length × width`, `MET → count × length`, others → `count`
+3. Compute `subtotal = quantity × unit_price` for each item
+4. Compute `total_amount = Σ subtotal` for all items
+5. Create a Debt record with `original_amount = total_amount - paid_immediately`
 
 **Validates: Requirements 4.2, 4.3, 4.4**
 
@@ -377,14 +384,6 @@ Khi tạo Payment với số tiền `P` cho Customer:
 *For any* combination of `customerId` and/or date range filters on the order list API, all returned orders SHALL satisfy all applied filter conditions.
 
 **Validates: Requirements 4.6**
-
----
-
-### Property 11: Terminal-status orders reject item updates
-
-*For any* order with status `COMPLETED` or `CANCELLED`, attempting to update its OrderItems SHALL return HTTP 409.
-
-**Validates: Requirements 4.10**
 
 ---
 
@@ -522,7 +521,6 @@ Các property cần implement (tham chiếu theo số ở trên):
 - **P8** — Order creation invariants (snapshot price, total_amount, debt)
 - **P9** — Overpayment at creation → 400
 - **P10** — Order filter trả về đúng records
-- **P11** — Terminal order từ chối update items
 - **P12** — has_debt flag phản ánh đúng trạng thái nợ
 - **P13** — Payment amount phải dương
 - **P14** — Payment trừ nợ đúng (kể cả âm)

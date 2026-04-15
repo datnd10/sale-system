@@ -27,7 +27,7 @@ public class ProductService {
 
     @Transactional
     public Product createProduct(String name, Long categoryId, ProductUnit unit, BigDecimal price,
-                                 BigDecimal height, BigDecimal width, String description) {
+                                 BigDecimal width, String description) {
         Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new EntityNotFoundException("Category not found with id: " + categoryId));
 
@@ -36,7 +36,6 @@ public class ProductService {
                 .category(category)
                 .unit(unit)
                 .price(price)
-                .height(height)
                 .width(width)
                 .description(description)
                 .active(true)
@@ -73,7 +72,7 @@ public class ProductService {
 
     @Transactional
     public Product updateProduct(Long id, String name, Long categoryId, ProductUnit unit,
-                                 BigDecimal price, BigDecimal height, BigDecimal width, String description) {
+                                 BigDecimal price, BigDecimal width, String description) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Product not found with id: " + id));
 
@@ -84,7 +83,6 @@ public class ProductService {
         product.setCategory(category);
         product.setUnit(unit);
         product.setPrice(price);
-        product.setHeight(height);
         product.setWidth(width);
         product.setDescription(description);
         return productRepository.save(product);

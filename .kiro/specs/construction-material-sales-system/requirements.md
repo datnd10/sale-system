@@ -83,7 +83,7 @@ Hệ thống backend quản lý bán hàng vật liệu xây dựng (tôn, sắt
 7. THE System SHALL cung cấp API để lấy chi tiết một Order theo ID, bao gồm danh sách OrderItem.
 8. WHEN một Order ID không tồn tại, THEN THE System SHALL trả về lỗi HTTP 404.
 9. THE System SHALL cung cấp API để cập nhật ghi chú (note) của Order theo ID.
-10. WHEN trạng thái Order là COMPLETED hoặc CANCELLED, THE System SHALL từ chối cập nhật OrderItem và trả về lỗi HTTP 409.
+10. THE System SHALL cung cấp API để xóa mềm (soft delete) một Order theo ID.
 
 ---
 

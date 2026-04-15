@@ -19,7 +19,6 @@ public class ProductResponse {
     private String categoryName;
     private ProductUnit unit;
     private BigDecimal price;
-    private BigDecimal height;
     private BigDecimal width;
     private String description;
     private Boolean active;
@@ -35,7 +34,6 @@ public class ProductResponse {
                 .categoryName(product.getCategory().getName())
                 .unit(product.getUnit())
                 .price(product.getPrice())
-                .height(product.getHeight())
                 .width(product.getWidth())
                 .description(product.getDescription())
                 .active(product.getActive())

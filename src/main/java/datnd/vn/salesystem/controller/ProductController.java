@@ -36,7 +36,6 @@ public class ProductController {
                         request.getCategoryId(),
                         request.getUnit(),
                         request.getPrice(),
-                        request.getHeight(),
                         request.getWidth(),
                         request.getDescription()
                 )
@@ -102,7 +101,6 @@ public class ProductController {
                         request.getCategoryId(),
                         request.getUnit(),
                         request.getPrice(),
-                        request.getHeight(),
                         request.getWidth(),
                         request.getDescription()
                 )

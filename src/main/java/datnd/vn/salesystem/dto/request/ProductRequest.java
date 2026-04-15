@@ -24,8 +24,6 @@ public class ProductRequest {
     @Positive(message = "Price must be greater than 0")
     private BigDecimal price;
 
-    private BigDecimal height;
-
     private BigDecimal width;
 
     private String description;

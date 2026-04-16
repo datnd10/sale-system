@@ -11,17 +11,17 @@ import java.math.BigDecimal;
 @Data
 public class ProductRequest {
 
-    @NotBlank(message = "Product name is required")
+    @NotBlank(message = "Tên sản phẩm không được để trống")
     private String name;
 
-    @NotNull(message = "Category ID is required")
+    @NotNull(message = "Vui lòng chọn danh mục")
     private Long categoryId;
 
-    @NotNull(message = "Unit is required")
+    @NotNull(message = "Vui lòng chọn đơn vị tính")
     private ProductUnit unit;
 
-    @NotNull(message = "Price is required")
-    @Positive(message = "Price must be greater than 0")
+    @NotNull(message = "Vui lòng nhập giá bán")
+    @Positive(message = "Giá bán phải lớn hơn 0")
     private BigDecimal price;
 
     private BigDecimal width;

@@ -46,6 +46,18 @@ public class SpecificationBuilder<T> {
     }
 
     /**
+     * Exact match predicate cho nested path (ví dụ: "category", "id").
+     * Dùng khi cần filter theo field của entity liên kết.
+     * Skipped when value is null.
+     */
+    public SpecificationBuilder<T> eqJoin(String joinField, String field, Object value) {
+        if (value != null) {
+            specs.add((root, query, cb) -> cb.equal(root.get(joinField).get(field), value));
+        }
+        return this;
+    }
+
+    /**
      * Case-insensitive, accent-insensitive LIKE predicate dùng PostgreSQL unaccent().
      * Tìm "ton" sẽ khớp "tôn", "tón", "tòn"...
      * Skipped when value is null or blank.

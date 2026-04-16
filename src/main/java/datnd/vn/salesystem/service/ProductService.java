@@ -9,6 +9,7 @@ import datnd.vn.salesystem.entity.Product;
 import datnd.vn.salesystem.exception.EntityNotFoundException;
 import datnd.vn.salesystem.repository.CategoryRepository;
 import datnd.vn.salesystem.repository.ProductRepository;
+import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -51,9 +52,18 @@ public class ProductService {
         Specification<Product> spec = SpecificationBuilder.<Product>builder()
                 .like("name", (String) request.getFilters().get("name"))
                 .eq("active", request.getFilters().getOrDefault("active", true))
-                .eq("category.id", request.getFilters().get("categoryId"))
+                .eqJoin("category", "id", request.getFilters().get("categoryId"))
                 .build();
-        return productRepository.findAll(spec, request.toPageable());
+
+        // Thêm JOIN FETCH category để tránh LazyInitializationException
+        Specification<Product> fetchSpec = spec.and((root, query, cb) -> {
+            if (query != null && Long.class != query.getResultType()) {
+                root.fetch("category", JoinType.LEFT);
+            }
+            return cb.conjunction();
+        });
+
+        return productRepository.findAll(fetchSpec, request.toPageable());
     }
 
     @Transactional(readOnly = true)

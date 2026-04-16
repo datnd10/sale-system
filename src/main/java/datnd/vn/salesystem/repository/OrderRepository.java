@@ -1,6 +1,7 @@
 package datnd.vn.salesystem.repository;
 
 import datnd.vn.salesystem.entity.Order;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -10,15 +11,25 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecificationExecutor<Order> {
 
+    @EntityGraph(attributePaths = {"customer"})
     List<Order> findAllByCustomerId(Long customerId);
 
+    @EntityGraph(attributePaths = {"customer"})
     List<Order> findAllByOrderDateBetween(LocalDate from, LocalDate to);
 
+    @EntityGraph(attributePaths = {"customer"})
     List<Order> findAllByCustomerIdAndOrderDateBetween(Long customerId, LocalDate from, LocalDate to);
+
+    @EntityGraph(attributePaths = {"customer"})
+    List<Order> findAll();
+
+    @EntityGraph(attributePaths = {"customer"})
+    Optional<Order> findById(Long id);
 
     /**
      * Count active orders within a date range.

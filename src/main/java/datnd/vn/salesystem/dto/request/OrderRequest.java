@@ -12,14 +12,16 @@ import java.util.List;
 @Data
 public class OrderRequest {
 
-    @NotNull(message = "Customer ID is required")
+    @NotNull(message = "Vui lòng chọn khách hàng")
     private Long customerId;
 
     private LocalDate orderDate;
 
-    @NotEmpty(message = "Order must have at least one item")
+    @NotEmpty(message = "Đơn hàng phải có ít nhất 1 sản phẩm")
     @Valid
     private List<OrderItemRequest> items;
 
     private BigDecimal paidImmediately;
+
+    private String note;
 }

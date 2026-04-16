@@ -13,7 +13,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-
 @Service
 @RequiredArgsConstructor
 public class OrderService {
@@ -23,6 +22,7 @@ public class OrderService {
     private final DebtRepository debtRepository;
     private final CustomerRepository customerRepository;
     private final ProductRepository productRepository;
+    private final PaymentRepository paymentRepository;
 
     /**
      * Request DTO for a single order item line.
@@ -165,6 +165,117 @@ public class OrderService {
             customer.setHasDebt(true);
             customerRepository.save(customer);
         }
+
+        // Tạo bản ghi Payment nếu khách hàng thanh toán ngay
+        if (paidImmediately.compareTo(BigDecimal.ZERO) > 0) {
+            Payment payment = Payment.builder()
+                    .customer(customer)
+                    .amount(paidImmediately)
+                    .paymentDate(orderDate)
+                    .note("Thanh toán ngay khi tạo đơn " + savedOrder.getCode())
+                    .build();
+            Payment savedPayment = paymentRepository.save(payment);
+            savedPayment.setCode(String.format("TT%07d", savedPayment.getId()));
+            paymentRepository.save(savedPayment);
+        }
+
+        return new OrderWithItems(savedOrder, savedItems);
+    }
+
+    // -------------------------------------------------------------------------
+    // updateOrder
+    // -------------------------------------------------------------------------
+
+    /**
+     * Updates an existing Order: recalculates totals, replaces OrderItems, updates Debt.
+     */
+    @Transactional
+    public OrderWithItems updateOrder(Long id,
+                                      Long customerId,
+                                      LocalDate orderDate,
+                                      List<OrderItemRequest> itemRequests,
+                                      BigDecimal paidImmediately,
+                                      String note) {
+
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy đơn hàng với mã: " + id));
+
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy khách hàng với mã: " + customerId));
+
+        if (orderDate == null) orderDate = order.getOrderDate();
+        if (paidImmediately == null) paidImmediately = BigDecimal.ZERO;
+
+        // Validate & build new items
+        List<Product> products = new ArrayList<>();
+        for (OrderItemRequest req : itemRequests) {
+            Product product = productRepository.findById(req.productId())
+                    .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy sản phẩm với mã: " + req.productId()));
+            products.add(product);
+        }
+
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        List<OrderItem> newItems = new ArrayList<>();
+
+        for (int i = 0; i < itemRequests.size(); i++) {
+            OrderItemRequest req = itemRequests.get(i);
+            Product product = products.get(i);
+            BigDecimal count = req.count();
+            BigDecimal length = req.length() != null ? req.length() : BigDecimal.ZERO;
+            BigDecimal width = req.width() != null ? req.width() : BigDecimal.ZERO;
+            BigDecimal quantity = computeQuantity(product.getUnit(), count, length, width);
+            BigDecimal unitPrice = product.getPrice();
+            BigDecimal subtotal = quantity.multiply(unitPrice);
+            totalAmount = totalAmount.add(subtotal);
+
+            newItems.add(OrderItem.builder()
+                    .product(product).length(req.length()).width(req.width())
+                    .height(req.height()).count(count).quantity(quantity)
+                    .unitPrice(unitPrice).subtotal(subtotal).build());
+        }
+
+        if (paidImmediately.compareTo(totalAmount) > 0) {
+            throw new InvalidRequestException(
+                    "Số tiền thanh toán ngay không được vượt quá tổng tiền đơn hàng (" + totalAmount + ")");
+        }
+
+        // Update order fields
+        order.setCustomer(customer);
+        order.setOrderDate(orderDate);
+        order.setTotalAmount(totalAmount);
+        order.setPaidImmediately(paidImmediately);
+        order.setNote(note);
+        Order savedOrder = orderRepository.save(order);
+
+        // Replace order items
+        orderItemRepository.deleteAllByOrderId(savedOrder.getId());
+        List<OrderItem> savedItems = new ArrayList<>();
+        for (OrderItem item : newItems) {
+            item.setOrder(savedOrder);
+            savedItems.add(orderItemRepository.save(item));
+        }
+
+        // Update debt record
+        BigDecimal newOriginalAmount = totalAmount.subtract(paidImmediately);
+        List<Debt> debts = debtRepository.findAllByOrderId(savedOrder.getId());
+        if (!debts.isEmpty()) {
+            Debt debt = debts.get(0);
+            debt.setOriginalAmount(newOriginalAmount);
+            debt.setRemainingAmount(newOriginalAmount);
+            debtRepository.save(debt);
+        } else if (newOriginalAmount.compareTo(BigDecimal.ZERO) > 0) {
+            Debt debt = Debt.builder()
+                    .customer(customer).order(savedOrder)
+                    .originalAmount(newOriginalAmount).remainingAmount(newOriginalAmount).build();
+            Debt savedDebt = debtRepository.save(debt);
+            savedDebt.setCode(String.format("CN%07d", savedDebt.getId()));
+            debtRepository.save(savedDebt);
+        }
+
+        // Update customer has_debt flag
+        boolean hasDebt = newOriginalAmount.compareTo(BigDecimal.ZERO) > 0;
+        customer.setHasDebt(hasDebt);
+        customerRepository.save(customer);
 
         return new OrderWithItems(savedOrder, savedItems);
     }

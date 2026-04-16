@@ -87,6 +87,38 @@ public class OrderController {
         );
     }
 
+    @Operation(summary = "Cập nhật đơn hàng",
+            description = "Cập nhật toàn bộ thông tin đơn hàng: khách hàng, ngày, sản phẩm, thanh toán. Tự động tính lại Debt.")
+    @PutMapping("/{id}")
+    public ApiResponse<OrderDetailResponse> updateOrder(
+            @Parameter(description = "ID đơn hàng") @PathVariable Long id,
+            @Valid @RequestBody OrderRequest request) {
+
+        List<OrderService.OrderItemRequest> itemRequests = request.getItems().stream()
+                .map(item -> new OrderService.OrderItemRequest(
+                        item.getProductId(),
+                        item.getCount(),
+                        item.getLength(),
+                        item.getWidth(),
+                        item.getHeight()
+                ))
+                .toList();
+
+        OrderService.OrderWithItems result = orderService.updateOrder(
+                id,
+                request.getCustomerId(),
+                request.getOrderDate(),
+                itemRequests,
+                request.getPaidImmediately(),
+                request.getNote()
+        );
+
+        return ApiResponse.success(
+                OrderDetailResponse.from(result.order(), result.items()),
+                "Order updated successfully"
+        );
+    }
+
     @Operation(summary = "Cập nhật ghi chú đơn hàng",
             description = "Cập nhật trường note của đơn hàng theo ID.")
     @PatchMapping("/{id}/note")

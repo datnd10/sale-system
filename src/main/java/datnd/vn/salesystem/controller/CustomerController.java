@@ -76,7 +76,7 @@ public class CustomerController {
     public ApiResponse<CustomerResponse> getCustomerById(
             @Parameter(description = "ID khách hàng") @PathVariable Long id) {
         return ApiResponse.success(
-                CustomerResponse.from(customerService.getCustomerById(id)),
+                customerService.getCustomerWithDebtInfo(id),
                 "Customer retrieved successfully"
         );
     }

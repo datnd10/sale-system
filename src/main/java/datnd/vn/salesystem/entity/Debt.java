@@ -28,7 +28,7 @@ public class Debt extends BaseEntity {
     private Customer customer;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id", nullable = false)
+    @JoinColumn(name = "order_id", nullable = true)
     private Order order;
 
     @Column(name = "original_amount", nullable = false, precision = 15, scale = 2)

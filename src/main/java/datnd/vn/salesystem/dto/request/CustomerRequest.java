@@ -7,10 +7,10 @@ import lombok.Data;
 @Data
 public class CustomerRequest {
 
-    @NotBlank(message = "Customer name is required")
+    @NotBlank(message = "Tên khách hàng không được để trống")
     private String name;
 
-    @Size(max = 20, message = "Phone number must not exceed 20 characters")
+    @Size(max = 20, message = "Số điện thoại không được vượt quá 20 ký tự")
     private String phone;
 
     private String address;

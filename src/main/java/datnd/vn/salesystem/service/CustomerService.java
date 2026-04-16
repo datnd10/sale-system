@@ -2,16 +2,20 @@ package datnd.vn.salesystem.service;
 
 import datnd.vn.salesystem.common.SearchRequest;
 import datnd.vn.salesystem.common.SpecificationBuilder;
+import datnd.vn.salesystem.dto.response.CustomerResponse;
 import datnd.vn.salesystem.entity.Customer;
+import datnd.vn.salesystem.entity.Debt;
 import datnd.vn.salesystem.exception.DuplicateResourceException;
 import datnd.vn.salesystem.exception.EntityNotFoundException;
 import datnd.vn.salesystem.repository.CustomerRepository;
+import datnd.vn.salesystem.repository.DebtRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -19,6 +23,7 @@ import java.util.List;
 public class CustomerService {
 
     private final CustomerRepository customerRepository;
+    private final DebtRepository debtRepository;
 
     @Transactional
     public Customer createCustomer(String name, String phone, String address) {
@@ -59,6 +64,19 @@ public class CustomerService {
     public Customer getCustomerById(Long id) {
         return customerRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy khách hàng với mã: " + id));
+    }
+
+    @Transactional(readOnly = true)
+    public CustomerResponse getCustomerWithDebtInfo(Long id) {
+        Customer customer = customerRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy khách hàng với mã: " + id));
+
+        List<Debt> allDebts = debtRepository.findAllByCustomerId(id);
+        BigDecimal totalDebt = allDebts.stream()
+                .map(Debt::getRemainingAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return CustomerResponse.from(customer, totalDebt);
     }
 
     @Transactional

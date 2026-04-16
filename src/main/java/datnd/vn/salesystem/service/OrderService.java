@@ -68,7 +68,7 @@ public class OrderService {
 
         // 1. Validate customer
         Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new EntityNotFoundException("Customer not found with id: " + customerId));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy khách hàng với mã: " + customerId));
 
         // Default values
         if (orderDate == null) {
@@ -82,7 +82,7 @@ public class OrderService {
         List<Product> products = new ArrayList<>();
         for (OrderItemRequest req : itemRequests) {
             Product product = productRepository.findById(req.productId())
-                    .orElseThrow(() -> new EntityNotFoundException("Product not found with id: " + req.productId()));
+                    .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy sản phẩm với mã: " + req.productId()));
             products.add(product);
         }
 
@@ -124,7 +124,7 @@ public class OrderService {
         // 6. Validate paid_immediately <= total_amount
         if (paidImmediately.compareTo(totalAmount) > 0) {
             throw new InvalidRequestException(
-                    "paid_immediately (" + paidImmediately + ") cannot exceed total_amount (" + totalAmount + ")");
+                    "Số tiền thanh toán ngay (" + paidImmediately + ") không được vượt quá tổng tiền đơn hàng (" + totalAmount + ")");
         }
 
         // 7. Create and save Order
@@ -199,7 +199,7 @@ public class OrderService {
     @Transactional(readOnly = true)
     public OrderWithItems getOrderById(Long id) {
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Order not found with id: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy đơn hàng với mã: " + id));
         List<OrderItem> items = orderItemRepository.findAllByOrderId(id);
         return new OrderWithItems(order, items);
     }
@@ -214,7 +214,7 @@ public class OrderService {
     @Transactional
     public Order updateOrderNote(Long id, String note) {
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Order not found with id: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy đơn hàng với mã: " + id));
         order.setNote(note);
         return orderRepository.save(order);
     }
@@ -229,7 +229,7 @@ public class OrderService {
     @Transactional
     public void deleteOrder(Long id) {
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Order not found with id: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy đơn hàng với mã: " + id));
         order.setActive(false);
         orderRepository.save(order);
     }

@@ -26,7 +26,7 @@ public class CategoryService {
     @Transactional
     public Category createCategory(String name, String description) {
         categoryRepository.findByNameIgnoreCase(name).ifPresent(existing -> {
-            throw new DuplicateResourceException("Category name already exists: " + name);
+            throw new DuplicateResourceException("Tên danh mục '" + name + "' đã tồn tại");
         });
 
         Category category = Category.builder()
@@ -57,17 +57,17 @@ public class CategoryService {
     @Transactional(readOnly = true)
     public Category getCategoryById(Long id) {
         return categoryRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Category not found with id: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy danh mục với mã: " + id));
     }
 
     @Transactional
     public Category updateCategory(Long id, String name, String description) {
         Category category = categoryRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Category not found with id: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy danh mục với mã: " + id));
 
         categoryRepository.findByNameIgnoreCase(name).ifPresent(existing -> {
             if (!existing.getId().equals(id)) {
-                throw new DuplicateResourceException("Category name already exists: " + name);
+                throw new DuplicateResourceException("Tên danh mục '" + name + "' đã tồn tại");
             }
         });
 
@@ -79,10 +79,10 @@ public class CategoryService {
     @Transactional
     public void deleteCategory(Long id) {
         Category category = categoryRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Category not found with id: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy danh mục với mã: " + id));
 
         if (productRepository.existsByCategoryIdAndActiveTrue(id)) {
-            throw new BusinessRuleException("Cannot delete category with linked active products");
+            throw new BusinessRuleException("Không thể xóa danh mục vì đang có sản phẩm liên kết");
         }
 
         category.setActive(false);

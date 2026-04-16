@@ -75,7 +75,7 @@ public class DebtService {
     @Transactional(readOnly = true)
     public CustomerDebtDetail getCustomerDebtDetail(Long customerId) {
         Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new EntityNotFoundException("Customer not found with id: " + customerId));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy khách hàng với mã: " + customerId));
 
         List<Debt> debts = debtRepository
                 .findAllByCustomerIdAndRemainingAmountGreaterThanOrderByCreatedAtAsc(customerId, BigDecimal.ZERO);
@@ -104,7 +104,7 @@ public class DebtService {
     @Transactional
     public Customer updateCustomerDebtFlag(Long customerId) {
         Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new EntityNotFoundException("Customer not found with id: " + customerId));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy khách hàng với mã: " + customerId));
 
         // Sum all remaining_amount for this customer (including zero/negative entries)
         List<Debt> allDebts = debtRepository.findAllByCustomerId(customerId);

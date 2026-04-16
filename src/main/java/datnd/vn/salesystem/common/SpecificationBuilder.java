@@ -45,11 +45,20 @@ public class SpecificationBuilder<T> {
         return this;
     }
 
-    /** Case-insensitive LIKE predicate. Skipped when value is null or blank. */
+    /**
+     * Case-insensitive, accent-insensitive LIKE predicate dùng PostgreSQL unaccent().
+     * Tìm "ton" sẽ khớp "tôn", "tón", "tòn"...
+     * Skipped when value is null or blank.
+     */
     public SpecificationBuilder<T> like(String field, String value) {
         if (value != null && !value.isBlank()) {
-            specs.add((root, query, cb) ->
-                    cb.like(cb.lower(root.get(field)), "%" + value.toLowerCase() + "%"));
+            specs.add((root, query, cb) -> {
+                // unaccent(lower(field)) LIKE unaccent(lower('%keyword%'))
+                var unaccentField = cb.function("unaccent", String.class, cb.lower(root.get(field)));
+                var unaccentValue = cb.function("unaccent", String.class,
+                        cb.literal("%" + value.toLowerCase() + "%"));
+                return cb.like(unaccentField, unaccentValue);
+            });
         }
         return this;
     }

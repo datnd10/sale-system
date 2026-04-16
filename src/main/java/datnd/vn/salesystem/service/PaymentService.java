@@ -37,11 +37,10 @@ public class PaymentService {
         // Validate customer exists
         Customer customer = customerRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "Customer not found with id: " + request.getCustomerId()));
+                        "Không tìm thấy khách hàng với mã: " + request.getCustomerId()));
 
-        // Service-level amount validation (Bean Validation also handles this)
         if (request.getAmount() == null || request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new InvalidRequestException("Payment amount must be positive");
+            throw new InvalidRequestException("Số tiền thanh toán phải lớn hơn 0");
         }
 
         // Determine payment date — default to today if not provided
@@ -94,7 +93,7 @@ public class PaymentService {
     public List<PaymentResponse> getPaymentsByCustomer(Long customerId) {
         customerRepository.findById(customerId)
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "Customer not found with id: " + customerId));
+                        "Không tìm thấy khách hàng với mã: " + customerId));
 
         return paymentRepository.findByCustomerIdOrderByCreatedAtDesc(customerId)
                 .stream()

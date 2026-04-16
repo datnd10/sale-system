@@ -29,7 +29,7 @@ public class ProductService {
     public Product createProduct(String name, Long categoryId, ProductUnit unit, BigDecimal price,
                                  BigDecimal width, String description) {
         Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new EntityNotFoundException("Category not found with id: " + categoryId));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy danh mục với mã: " + categoryId));
 
         Product product = Product.builder()
                 .name(name)
@@ -67,17 +67,17 @@ public class ProductService {
     @Transactional(readOnly = true)
     public Product getProductById(Long id) {
         return productRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Product not found with id: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy sản phẩm với mã: " + id));
     }
 
     @Transactional
     public Product updateProduct(Long id, String name, Long categoryId, ProductUnit unit,
                                  BigDecimal price, BigDecimal width, String description) {
         Product product = productRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Product not found with id: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy sản phẩm với mã: " + id));
 
         Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new EntityNotFoundException("Category not found with id: " + categoryId));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy danh mục với mã: " + categoryId));
 
         product.setName(name);
         product.setCategory(category);
@@ -91,7 +91,7 @@ public class ProductService {
     @Transactional
     public void deleteProduct(Long id) {
         Product product = productRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Product not found with id: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy sản phẩm với mã: " + id));
         product.setActive(false);
         productRepository.save(product);
     }

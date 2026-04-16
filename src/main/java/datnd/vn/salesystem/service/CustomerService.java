@@ -24,7 +24,7 @@ public class CustomerService {
     public Customer createCustomer(String name, String phone, String address) {
         if (phone != null && !phone.isBlank()) {
             customerRepository.findByPhone(phone).ifPresent(existing -> {
-                throw new DuplicateResourceException("Phone number already exists: " + phone);
+                throw new DuplicateResourceException("Số điện thoại '" + phone + "' đã được sử dụng");
             });
         }
 
@@ -58,17 +58,17 @@ public class CustomerService {
     @Transactional(readOnly = true)
     public Customer getCustomerById(Long id) {
         return customerRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Customer not found with id: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy khách hàng với mã: " + id));
     }
 
     @Transactional
     public Customer updateCustomer(Long id, String name, String phone, String address) {
         Customer customer = customerRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Customer not found with id: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy khách hàng với mã: " + id));
 
         if (phone != null && !phone.isBlank()) {
             if (customerRepository.existsByPhoneAndIdNot(phone, id)) {
-                throw new DuplicateResourceException("Phone number already exists: " + phone);
+                throw new DuplicateResourceException("Số điện thoại '" + phone + "' đã được sử dụng");
             }
         }
 

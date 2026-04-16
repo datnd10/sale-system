@@ -48,17 +48,17 @@ public class GlobalExceptionHandler {
         Map<String, String> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
                 .collect(Collectors.toMap(
                         FieldError::getField,
-                        fe -> fe.getDefaultMessage() != null ? fe.getDefaultMessage() : "Invalid value",
+                        fe -> fe.getDefaultMessage() != null ? fe.getDefaultMessage() : "Giá trị không hợp lệ",
                         (existing, replacement) -> existing
                 ));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiResponse<>(false, fieldErrors, "Validation failed", Instant.now().toString()));
+                .body(new ApiResponse<>(false, fieldErrors, "Dữ liệu không hợp lệ", Instant.now().toString()));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneral(Exception ex) {
         log.error("Unexpected error occurred", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiResponse<>(false, null, "Internal server error", Instant.now().toString()));
+                .body(new ApiResponse<>(false, null, "Lỗi hệ thống, vui lòng thử lại sau", Instant.now().toString()));
     }
 }

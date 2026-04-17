@@ -1,5 +1,6 @@
 package datnd.vn.salesystem.service;
 
+import datnd.vn.salesystem.common.PageResponse;
 import datnd.vn.salesystem.dto.request.PaymentRequest;
 import datnd.vn.salesystem.dto.response.PaymentResponse;
 import datnd.vn.salesystem.entity.Customer;
@@ -11,6 +12,9 @@ import datnd.vn.salesystem.repository.CustomerRepository;
 import datnd.vn.salesystem.repository.DebtRepository;
 import datnd.vn.salesystem.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -106,6 +110,29 @@ public class PaymentService {
      *
      * Requirements: 6.6
      */
+    @Transactional(readOnly = true)
+    public PageResponse<PaymentResponse> searchPayments(
+            String customerName, LocalDate from, LocalDate to,
+            int page, int size, String sort, Sort.Direction direction) {
+
+        Specification<Payment> spec = (root, query, cb) -> {
+            var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
+            if (query != null && Long.class != query.getResultType()) {
+                root.fetch("customer", jakarta.persistence.criteria.JoinType.LEFT);
+            }
+            if (customerName != null && !customerName.isBlank()) {
+                predicates.add(cb.like(cb.lower(root.get("customer").get("name")),
+                        "%" + customerName.toLowerCase() + "%"));
+            }
+            if (from != null) predicates.add(cb.greaterThanOrEqualTo(root.get("paymentDate"), from));
+            if (to != null) predicates.add(cb.lessThanOrEqualTo(root.get("paymentDate"), to));
+            return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
+
+        var pageable = PageRequest.of(page, size, Sort.by(direction, sort));
+        return PageResponse.from(paymentRepository.findAll(spec, pageable).map(PaymentResponse::from));
+    }
+
     @Transactional(readOnly = true)
     public List<PaymentResponse> getAllPayments(LocalDate from, LocalDate to) {
         List<Payment> payments;

@@ -13,6 +13,7 @@ public class OrderItemResponse {
     private Long id;
     private Long productId;
     private String productName;
+    private String productUnit;
     private BigDecimal length;
     private BigDecimal width;
     private BigDecimal height;
@@ -26,6 +27,7 @@ public class OrderItemResponse {
                 .id(item.getId())
                 .productId(item.getProduct().getId())
                 .productName(item.getProduct().getName())
+                .productUnit(item.getProduct().getUnit().name())
                 .length(item.getLength())
                 .width(item.getWidth())
                 .height(item.getHeight())

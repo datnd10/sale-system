@@ -1,11 +1,14 @@
 package datnd.vn.salesystem.service;
 
+import datnd.vn.salesystem.common.SearchRequest;
 import datnd.vn.salesystem.constant.enums.ProductUnit;
 import datnd.vn.salesystem.entity.*;
 import datnd.vn.salesystem.exception.EntityNotFoundException;
 import datnd.vn.salesystem.exception.InvalidRequestException;
 import datnd.vn.salesystem.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -278,6 +281,45 @@ public class OrderService {
         customerRepository.save(customer);
 
         return new OrderWithItems(savedOrder, savedItems);
+    }
+
+    // -------------------------------------------------------------------------
+    // searchOrders
+    // -------------------------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    public Page<Order> searchOrders(SearchRequest request) {
+        Specification<Order> spec = (root, query, cb) -> {
+            var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
+
+            // JOIN FETCH customer để tránh LazyInitializationException
+            if (query != null && Long.class != query.getResultType()) {
+                root.fetch("customer", jakarta.persistence.criteria.JoinType.LEFT);
+            }
+
+            // Filter by customerId
+            Object customerId = request.getFilters().get("customerId");
+            if (customerId != null) {
+                predicates.add(cb.equal(root.get("customer").get("id"), customerId));
+            }
+
+            // Filter by date range
+            Object from = request.getFilters().get("from");
+            Object to = request.getFilters().get("to");
+            if (from != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("orderDate"), (java.time.LocalDate) from));
+            }
+            if (to != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("orderDate"), (java.time.LocalDate) to));
+            }
+
+            // Only active orders
+            predicates.add(cb.isTrue(root.get("active")));
+
+            return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
+
+        return orderRepository.findAll(spec, request.toPageable());
     }
 
     // -------------------------------------------------------------------------

@@ -1,15 +1,19 @@
 package datnd.vn.salesystem.service;
 
+import datnd.vn.salesystem.common.PageResponse;
 import datnd.vn.salesystem.entity.Customer;
 import datnd.vn.salesystem.entity.Debt;
+import datnd.vn.salesystem.dto.response.DebtSummaryResponse;
 import datnd.vn.salesystem.exception.EntityNotFoundException;
 import datnd.vn.salesystem.repository.CustomerRepository;
 import datnd.vn.salesystem.repository.DebtRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -41,6 +45,37 @@ public class DebtService {
      *
      * Requirements: 5.1
      */
+    @Transactional(readOnly = true)
+    public PageResponse<DebtSummaryResponse> searchDebts(
+            String customerName, int page, int size, String sort, Sort.Direction direction) {
+
+        List<CustomerDebtSummary> all = getAllCustomerDebts();
+
+        // Filter by customer name
+        List<CustomerDebtSummary> filtered = all.stream()
+                .filter(s -> customerName == null || customerName.isBlank() ||
+                        s.customer().getName().toLowerCase().contains(customerName.toLowerCase()))
+                .collect(Collectors.toList());
+
+        // Sort
+        Comparator<CustomerDebtSummary> comparator = Comparator.comparing(
+                s -> s.totalRemaining(), Comparator.reverseOrder());
+        if (direction == Sort.Direction.ASC) {
+            comparator = Comparator.comparing(s -> s.totalRemaining());
+        }
+        filtered.sort(comparator);
+
+        // Paginate
+        int total = filtered.size();
+        int fromIdx = Math.min(page * size, total);
+        int toIdx = Math.min(fromIdx + size, total);
+        List<DebtSummaryResponse> content = filtered.subList(fromIdx, toIdx)
+                .stream().map(DebtSummaryResponse::from).toList();
+
+        return new PageResponse<>(content, page, size, total,
+                (int) Math.ceil((double) total / size), fromIdx + size >= total);
+    }
+
     @Transactional(readOnly = true)
     public List<CustomerDebtSummary> getAllCustomerDebts() {
         // Fetch all debts with remaining_amount > 0 (customer eagerly loaded)

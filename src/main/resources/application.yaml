@@ -49,3 +49,11 @@ springdoc:
     display-request-duration: true
     operationsSorter: method
     tagsSorter: alpha
+
+# Auth config — tài khoản nội bộ
+app:
+  auth:
+    username: ${APP_AUTH_USERNAME:admin}
+    password: ${APP_AUTH_PASSWORD:admin123}
+    jwt-secret: ${APP_JWT_SECRET:sale-system-secret-key-2024-internal-use-only}
+    jwt-expiration-ms: 86400000 # 24 giờ

@@ -4,11 +4,11 @@ import datnd.vn.salesystem.common.SearchRequest;
 import datnd.vn.salesystem.common.SpecificationBuilder;
 import datnd.vn.salesystem.dto.response.CustomerResponse;
 import datnd.vn.salesystem.entity.Customer;
-import datnd.vn.salesystem.entity.Debt;
 import datnd.vn.salesystem.exception.DuplicateResourceException;
 import datnd.vn.salesystem.exception.EntityNotFoundException;
 import datnd.vn.salesystem.repository.CustomerRepository;
-import datnd.vn.salesystem.repository.DebtRepository;
+import datnd.vn.salesystem.repository.OrderRepository;
+import datnd.vn.salesystem.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -23,7 +23,8 @@ import java.util.List;
 public class CustomerService {
 
     private final CustomerRepository customerRepository;
-    private final DebtRepository debtRepository;
+    private final OrderRepository orderRepository;
+    private final PaymentRepository paymentRepository;
 
     @Transactional
     public Customer createCustomer(String name, String phone, String address) {
@@ -71,11 +72,7 @@ public class CustomerService {
         Customer customer = customerRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy khách hàng với mã: " + id));
 
-        List<Debt> allDebts = debtRepository.findAllByCustomerId(id);
-        BigDecimal totalDebt = allDebts.stream()
-                .map(Debt::getRemainingAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
+        BigDecimal totalDebt = calculateDebt(id);
         return CustomerResponse.from(customer, totalDebt);
     }
 
@@ -94,5 +91,14 @@ public class CustomerService {
         customer.setPhone(phone);
         customer.setAddress(address);
         return customerRepository.save(customer);
+    }
+
+    /**
+     * Tính tổng công nợ: Σ(SALE.total_amount) - Σ(Payment.amount)
+     */
+    private BigDecimal calculateDebt(Long customerId) {
+        BigDecimal totalSale = orderRepository.sumSaleTotalAmountByCustomerId(customerId);
+        BigDecimal totalPaid = paymentRepository.sumAmountByCustomerId(customerId);
+        return totalSale.subtract(totalPaid);
     }
 }

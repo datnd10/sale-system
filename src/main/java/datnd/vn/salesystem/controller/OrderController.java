@@ -4,6 +4,7 @@ import datnd.vn.salesystem.common.ApiResponse;
 import datnd.vn.salesystem.common.PageResponse;
 import datnd.vn.salesystem.common.SearchRequest;
 import datnd.vn.salesystem.constant.Constants;
+import datnd.vn.salesystem.constant.enums.OrderType;
 import datnd.vn.salesystem.dto.request.OrderRequest;
 import datnd.vn.salesystem.dto.request.UpdateNoteRequest;
 import datnd.vn.salesystem.dto.response.OrderDetailResponse;
@@ -22,7 +23,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 
-@Tag(name = "Order", description = "Quản lý đơn hàng")
+@Tag(name = "Order", description = "Quản lý đơn hàng (bán hàng và trả nợ)")
 @RestController
 @RequestMapping(Constants.URI.ORDER)
 @RequiredArgsConstructor
@@ -30,26 +31,27 @@ public class OrderController {
 
     private final OrderService orderService;
 
-    @Operation(summary = "Tạo đơn hàng mới",
-            description = "Tạo đơn hàng với danh sách sản phẩm. Tự động tính total_amount và tạo bản ghi Debt.")
+    @Operation(
+            summary = "Tạo đơn hàng mới",
+            description = """
+                    Tạo đơn hàng theo loại:
+                    - **SALE**: Đơn bán hàng — cần truyền `items` và `paidImmediately` (tùy chọn).
+                    - **PAYMENT**: Đơn trả nợ — chỉ cần truyền `amount`, không cần `items`.
+                    """
+    )
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<OrderDetailResponse> createOrder(@Valid @RequestBody OrderRequest request) {
-        List<OrderService.OrderItemRequest> itemRequests = request.getItems().stream()
-                .map(item -> new OrderService.OrderItemRequest(
-                        item.getProductId(),
-                        item.getCount(),
-                        item.getLength(),
-                        item.getWidth(),
-                        item.getHeight()
-                ))
-                .toList();
+        List<OrderService.OrderItemRequest> itemRequests = toItemRequests(request);
 
         OrderService.OrderWithItems result = orderService.createOrder(
                 request.getCustomerId(),
+                request.getOrderType(),
                 request.getOrderDate(),
                 itemRequests,
-                request.getPaidImmediately()
+                request.getPaidImmediately(),
+                request.getAmount(),
+                request.getNote()
         );
 
         return ApiResponse.success(
@@ -58,17 +60,20 @@ public class OrderController {
         );
     }
 
-    @Operation(summary = "Tìm kiếm đơn hàng có phân trang",
-            description = "Lọc theo customerId, khoảng thời gian với hỗ trợ phân trang.")
+    @Operation(
+            summary = "Tìm kiếm đơn hàng có phân trang",
+            description = "Lọc theo customerId, orderType, khoảng thời gian với hỗ trợ phân trang."
+    )
     @GetMapping("/search")
     public ApiResponse<PageResponse<OrderResponse>> searchOrders(
             @Parameter(description = "Lọc theo Customer ID") @RequestParam(required = false) Long customerId,
+            @Parameter(description = "Lọc theo loại đơn: SALE hoặc PAYMENT") @RequestParam(required = false) OrderType orderType,
             @Parameter(description = "Ngày bắt đầu (yyyy-MM-dd)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @Parameter(description = "Ngày kết thúc (yyyy-MM-dd)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @Parameter(description = "Số trang (bắt đầu từ 0)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Số bản ghi mỗi trang") @RequestParam(defaultValue = "10") int size,
-            @Parameter(description = "Trường sắp xếp") @RequestParam(defaultValue = "orderDate") String sort,
-            @Parameter(description = "Chiều sắp xếp: ASC hoặc DESC") @RequestParam(defaultValue = "DESC") Sort.Direction direction) {
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "orderDate") String sort,
+            @RequestParam(defaultValue = "DESC") Sort.Direction direction) {
 
         SearchRequest request = new SearchRequest();
         request.setPage(page);
@@ -76,40 +81,32 @@ public class OrderController {
         request.setSort(sort);
         request.setDirection(direction);
         if (customerId != null) request.filter("customerId", customerId);
+        if (orderType != null) request.filter("orderType", orderType);
         if (from != null) request.filter("from", from);
         if (to != null) request.filter("to", to);
 
-        PageResponse<OrderResponse> result = PageResponse.from(
-                orderService.searchOrders(request).map(OrderResponse::from)
+        return ApiResponse.success(
+                PageResponse.from(orderService.searchOrders(request).map(OrderResponse::from)),
+                "Orders retrieved successfully"
         );
-        return ApiResponse.success(result, "Orders retrieved successfully");
     }
 
-    @Operation(summary = "Lấy danh sách đơn hàng",
-            description = "Trả về danh sách đơn hàng, hỗ trợ lọc theo Customer ID và khoảng thời gian.")
+    @Operation(summary = "Lấy danh sách đơn hàng", description = "Hỗ trợ lọc theo Customer ID và khoảng thời gian.")
     @GetMapping
     public ApiResponse<List<OrderResponse>> getOrders(
-            @Parameter(description = "Lọc theo Customer ID (tùy chọn)")
             @RequestParam(required = false) Long customerId,
-            @Parameter(description = "Ngày bắt đầu (yyyy-MM-dd, tùy chọn)")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @Parameter(description = "Ngày kết thúc (yyyy-MM-dd, tùy chọn)")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
 
-        List<OrderResponse> orders = orderService.getOrders(customerId, from, to)
-                .stream()
-                .map(OrderResponse::from)
-                .toList();
-
-        return ApiResponse.success(orders, "Orders retrieved successfully");
+        return ApiResponse.success(
+                orderService.getOrders(customerId, from, to).stream().map(OrderResponse::from).toList(),
+                "Orders retrieved successfully"
+        );
     }
 
-    @Operation(summary = "Lấy chi tiết đơn hàng theo ID",
-            description = "Trả về thông tin đơn hàng kèm danh sách OrderItem.")
+    @Operation(summary = "Lấy chi tiết đơn hàng theo ID", description = "Trả về thông tin đơn hàng kèm OrderItems (nếu là đơn SALE).")
     @GetMapping("/{id:\\d+}")
-    public ApiResponse<OrderDetailResponse> getOrderById(
-            @Parameter(description = "ID đơn hàng") @PathVariable Long id) {
-
+    public ApiResponse<OrderDetailResponse> getOrderById(@PathVariable Long id) {
         OrderService.OrderWithItems result = orderService.getOrderById(id);
         return ApiResponse.success(
                 OrderDetailResponse.from(result.order(), result.items()),
@@ -117,29 +114,25 @@ public class OrderController {
         );
     }
 
-    @Operation(summary = "Cập nhật đơn hàng",
-            description = "Cập nhật toàn bộ thông tin đơn hàng: khách hàng, ngày, sản phẩm, thanh toán. Tự động tính lại Debt.")
+    @Operation(
+            summary = "Cập nhật đơn hàng",
+            description = "Cập nhật toàn bộ thông tin đơn hàng. Tự động tính lại Payment."
+    )
     @PutMapping("/{id:\\d+}")
     public ApiResponse<OrderDetailResponse> updateOrder(
-            @Parameter(description = "ID đơn hàng") @PathVariable Long id,
+            @PathVariable Long id,
             @Valid @RequestBody OrderRequest request) {
 
-        List<OrderService.OrderItemRequest> itemRequests = request.getItems().stream()
-                .map(item -> new OrderService.OrderItemRequest(
-                        item.getProductId(),
-                        item.getCount(),
-                        item.getLength(),
-                        item.getWidth(),
-                        item.getHeight()
-                ))
-                .toList();
+        List<OrderService.OrderItemRequest> itemRequests = toItemRequests(request);
 
         OrderService.OrderWithItems result = orderService.updateOrder(
                 id,
                 request.getCustomerId(),
+                request.getOrderType(),
                 request.getOrderDate(),
                 itemRequests,
                 request.getPaidImmediately(),
+                request.getAmount(),
                 request.getNote()
         );
 
@@ -149,26 +142,38 @@ public class OrderController {
         );
     }
 
-    @Operation(summary = "Cập nhật ghi chú đơn hàng",
-            description = "Cập nhật trường note của đơn hàng theo ID.")
+    @Operation(summary = "Cập nhật ghi chú đơn hàng")
     @PatchMapping("/{id:\\d+}/note")
     public ApiResponse<OrderResponse> updateOrderNote(
-            @Parameter(description = "ID đơn hàng") @PathVariable Long id,
+            @PathVariable Long id,
             @RequestBody UpdateNoteRequest request) {
-
         return ApiResponse.success(
                 OrderResponse.from(orderService.updateOrderNote(id, request.getNote())),
                 "Order note updated successfully"
         );
     }
 
-    @Operation(summary = "Xóa đơn hàng (soft delete)",
-            description = "Đánh dấu đơn hàng là không hoạt động (active = false).")
+    @Operation(summary = "Xóa đơn hàng (soft delete)")
     @DeleteMapping("/{id:\\d+}")
-    public ApiResponse<Void> deleteOrder(
-            @Parameter(description = "ID đơn hàng") @PathVariable Long id) {
-
+    public ApiResponse<Void> deleteOrder(@PathVariable Long id) {
         orderService.deleteOrder(id);
         return ApiResponse.success(null, "Order deleted successfully");
+    }
+
+    // -------------------------------------------------------------------------
+    // Helper
+    // -------------------------------------------------------------------------
+
+    private List<OrderService.OrderItemRequest> toItemRequests(OrderRequest request) {
+        if (request.getItems() == null) return List.of();
+        return request.getItems().stream()
+                .map(item -> new OrderService.OrderItemRequest(
+                        item.getProductId(),
+                        item.getCount(),
+                        item.getLength(),
+                        item.getWidth(),
+                        item.getHeight()
+                ))
+                .toList();
     }
 }

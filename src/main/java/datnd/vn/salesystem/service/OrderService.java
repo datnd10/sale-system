@@ -1,6 +1,7 @@
 package datnd.vn.salesystem.service;
 
 import datnd.vn.salesystem.common.SearchRequest;
+import datnd.vn.salesystem.constant.enums.OrderType;
 import datnd.vn.salesystem.constant.enums.ProductUnit;
 import datnd.vn.salesystem.entity.*;
 import datnd.vn.salesystem.exception.EntityNotFoundException;
@@ -15,21 +16,19 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
-    private final DebtRepository debtRepository;
     private final CustomerRepository customerRepository;
     private final ProductRepository productRepository;
     private final PaymentRepository paymentRepository;
 
-    /**
-     * Request DTO for a single order item line.
-     */
     public record OrderItemRequest(
             Long productId,
             BigDecimal count,
@@ -38,58 +37,53 @@ public class OrderService {
             BigDecimal height
     ) {}
 
-    /**
-     * Result DTO returned from createOrder / getOrderById.
-     */
     public record OrderWithItems(Order order, List<OrderItem> items) {}
 
     // -------------------------------------------------------------------------
-    // createOrder
+    // createOrder — phân nhánh theo orderType
     // -------------------------------------------------------------------------
 
-    /**
-     * Creates a new Order with its OrderItems and a corresponding Debt record.
-     *
-     * Flow:
-     * 1. Validate customer exists → 404
-     * 2. Validate each product in items exists → 404
-     * 3. Snapshot unit_price from product at creation time
-     * 4. Compute quantity per item based on product unit
-     * 5. Compute subtotal = quantity × unit_price per item
-     * 6. Compute total_amount = Σ subtotal
-     * 7. Validate paid_immediately <= total_amount → 400 if violated
-     * 8. Create Order entity (save → set code → save again)
-     * 9. Create OrderItem entities
-     * 10. Create Debt record with original_amount = total_amount - paid_immediately
-     *     (save → set code → save again)
-     */
     @Transactional
     public OrderWithItems createOrder(Long customerId,
+                                      OrderType orderType,
                                       LocalDate orderDate,
                                       List<OrderItemRequest> itemRequests,
-                                      BigDecimal paidImmediately) {
-
-        // 1. Validate customer
+                                      BigDecimal paidImmediately,
+                                      BigDecimal amount,
+                                      String note) {
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy khách hàng với mã: " + customerId));
 
-        // Default values
-        if (orderDate == null) {
-            orderDate = LocalDate.now();
-        }
-        if (paidImmediately == null) {
-            paidImmediately = BigDecimal.ZERO;
-        }
+        if (orderDate == null) orderDate = LocalDate.now();
 
-        // 2 & 3. Validate products and snapshot prices
+        return switch (orderType) {
+            case SALE -> createSaleOrder(customer, orderDate, itemRequests, paidImmediately, note);
+            case PAYMENT -> createPaymentOrder(customer, orderDate, amount, note);
+        };
+    }
+
+    // -------------------------------------------------------------------------
+    // SALE order
+    // -------------------------------------------------------------------------
+
+    private OrderWithItems createSaleOrder(Customer customer,
+                                            LocalDate orderDate,
+                                            List<OrderItemRequest> itemRequests,
+                                            BigDecimal paidImmediately,
+                                            String note) {
+        if (itemRequests == null || itemRequests.isEmpty()) {
+            throw new InvalidRequestException("Đơn bán hàng phải có ít nhất 1 sản phẩm");
+        }
+        if (paidImmediately == null) paidImmediately = BigDecimal.ZERO;
+
+        // Validate & load products
         List<Product> products = new ArrayList<>();
         for (OrderItemRequest req : itemRequests) {
-            Product product = productRepository.findById(req.productId())
-                    .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy sản phẩm với mã: " + req.productId()));
-            products.add(product);
+            products.add(productRepository.findById(req.productId())
+                    .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy sản phẩm với mã: " + req.productId())));
         }
 
-        // 4 & 5. Compute quantity and subtotal per item
+        // Tính total_amount và build OrderItems
         BigDecimal totalAmount = BigDecimal.ZERO;
         List<OrderItem> orderItems = new ArrayList<>();
 
@@ -100,18 +94,12 @@ public class OrderService {
             BigDecimal count = req.count();
             BigDecimal length = req.length() != null ? req.length() : BigDecimal.ZERO;
             BigDecimal width = req.width() != null ? req.width() : BigDecimal.ZERO;
-
-            // Compute quantity based on product unit
             BigDecimal quantity = computeQuantity(product.getUnit(), count, length, width);
-
-            // Snapshot unit_price from product
             BigDecimal unitPrice = product.getPrice();
-
-            // subtotal = quantity × unit_price
             BigDecimal subtotal = quantity.multiply(unitPrice);
             totalAmount = totalAmount.add(subtotal);
 
-            OrderItem item = OrderItem.builder()
+            orderItems.add(OrderItem.builder()
                     .product(product)
                     .length(req.length())
                     .width(req.width())
@@ -120,22 +108,22 @@ public class OrderService {
                     .quantity(quantity)
                     .unitPrice(unitPrice)
                     .subtotal(subtotal)
-                    .build();
-            orderItems.add(item);
+                    .build());
         }
 
-        // 6. Validate paid_immediately <= total_amount
         if (paidImmediately.compareTo(totalAmount) > 0) {
             throw new InvalidRequestException(
                     "Số tiền thanh toán ngay (" + paidImmediately + ") không được vượt quá tổng tiền đơn hàng (" + totalAmount + ")");
         }
 
-        // 7. Create and save Order
+        // Lưu Order
         Order order = Order.builder()
                 .customer(customer)
+                .orderType(OrderType.SALE)
                 .orderDate(orderDate)
                 .totalAmount(totalAmount)
                 .paidImmediately(paidImmediately)
+                .note(note)
                 .active(true)
                 .build();
 
@@ -143,61 +131,74 @@ public class OrderService {
         savedOrder.setCode(String.format("HD%07d", savedOrder.getId()));
         savedOrder = orderRepository.save(savedOrder);
 
-        // 8. Save OrderItems (link to saved order)
+        // Lưu OrderItems
         List<OrderItem> savedItems = new ArrayList<>();
         for (OrderItem item : orderItems) {
             item.setOrder(savedOrder);
             savedItems.add(orderItemRepository.save(item));
         }
 
-        // 9. Create Debt record
-        BigDecimal originalAmount = totalAmount.subtract(paidImmediately);
-        Debt debt = Debt.builder()
-                .customer(customer)
-                .order(savedOrder)
-                .originalAmount(originalAmount)
-                .remainingAmount(originalAmount)
-                .build();
-
-        Debt savedDebt = debtRepository.save(debt);
-        savedDebt.setCode(String.format("CN%07d", savedDebt.getId()));
-        debtRepository.save(savedDebt);
-
-        // Update customer has_debt flag if there is remaining debt
-        if (originalAmount.compareTo(BigDecimal.ZERO) > 0) {
-            customer.setHasDebt(true);
-            customerRepository.save(customer);
-        }
-
-        // Tạo bản ghi Payment nếu khách hàng thanh toán ngay
+        // Tạo Payment nếu có trả ngay
         if (paidImmediately.compareTo(BigDecimal.ZERO) > 0) {
-            Payment payment = Payment.builder()
-                    .customer(customer)
-                    .amount(paidImmediately)
-                    .paymentDate(orderDate)
-                    .note("Thanh toán ngay khi tạo đơn " + savedOrder.getCode())
-                    .build();
-            Payment savedPayment = paymentRepository.save(payment);
-            savedPayment.setCode(String.format("TT%07d", savedPayment.getId()));
-            paymentRepository.save(savedPayment);
+            savePayment(customer, savedOrder, paidImmediately, orderDate,
+                    "Thanh toán ngay khi tạo đơn " + savedOrder.getCode());
         }
+
+        // Cập nhật has_debt
+        updateCustomerDebtFlag(customer);
 
         return new OrderWithItems(savedOrder, savedItems);
+    }
+
+    // -------------------------------------------------------------------------
+    // PAYMENT order
+    // -------------------------------------------------------------------------
+
+    private OrderWithItems createPaymentOrder(Customer customer,
+                                               LocalDate orderDate,
+                                               BigDecimal amount,
+                                               String note) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidRequestException("Số tiền trả nợ phải lớn hơn 0");
+        }
+
+        // Lưu Order loại PAYMENT — total_amount = paid_immediately = amount
+        Order order = Order.builder()
+                .customer(customer)
+                .orderType(OrderType.PAYMENT)
+                .orderDate(orderDate)
+                .totalAmount(amount)
+                .paidImmediately(amount)
+                .note(note)
+                .active(true)
+                .build();
+
+        Order savedOrder = orderRepository.save(order);
+        savedOrder.setCode(String.format("HD%07d", savedOrder.getId()));
+        savedOrder = orderRepository.save(savedOrder);
+
+        // Tạo Payment record
+        savePayment(customer, savedOrder, amount, orderDate,
+                note != null ? note : "Trả nợ theo đơn " + savedOrder.getCode());
+
+        // Cập nhật has_debt
+        updateCustomerDebtFlag(customer);
+
+        return new OrderWithItems(savedOrder, Collections.emptyList());
     }
 
     // -------------------------------------------------------------------------
     // updateOrder
     // -------------------------------------------------------------------------
 
-    /**
-     * Updates an existing Order: recalculates totals, replaces OrderItems, updates Debt.
-     */
     @Transactional
     public OrderWithItems updateOrder(Long id,
                                       Long customerId,
+                                      OrderType orderType,
                                       LocalDate orderDate,
                                       List<OrderItemRequest> itemRequests,
                                       BigDecimal paidImmediately,
+                                      BigDecimal amount,
                                       String note) {
 
         Order order = orderRepository.findById(id)
@@ -207,14 +208,26 @@ public class OrderService {
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy khách hàng với mã: " + customerId));
 
         if (orderDate == null) orderDate = order.getOrderDate();
+
+        if (orderType == OrderType.SALE) {
+            return updateSaleOrder(order, customer, orderDate, itemRequests, paidImmediately, note);
+        } else {
+            return updatePaymentOrder(order, customer, orderDate, amount, note);
+        }
+    }
+
+    private OrderWithItems updateSaleOrder(Order order, Customer customer, LocalDate orderDate,
+                                            List<OrderItemRequest> itemRequests,
+                                            BigDecimal paidImmediately, String note) {
+        if (itemRequests == null || itemRequests.isEmpty()) {
+            throw new InvalidRequestException("Đơn bán hàng phải có ít nhất 1 sản phẩm");
+        }
         if (paidImmediately == null) paidImmediately = BigDecimal.ZERO;
 
-        // Validate & build new items
         List<Product> products = new ArrayList<>();
         for (OrderItemRequest req : itemRequests) {
-            Product product = productRepository.findById(req.productId())
-                    .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy sản phẩm với mã: " + req.productId()));
-            products.add(product);
+            products.add(productRepository.findById(req.productId())
+                    .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy sản phẩm với mã: " + req.productId())));
         }
 
         BigDecimal totalAmount = BigDecimal.ZERO;
@@ -242,15 +255,15 @@ public class OrderService {
                     "Số tiền thanh toán ngay không được vượt quá tổng tiền đơn hàng (" + totalAmount + ")");
         }
 
-        // Update order fields
         order.setCustomer(customer);
+        order.setOrderType(OrderType.SALE);
         order.setOrderDate(orderDate);
         order.setTotalAmount(totalAmount);
         order.setPaidImmediately(paidImmediately);
         order.setNote(note);
         Order savedOrder = orderRepository.save(order);
 
-        // Replace order items
+        // Thay thế OrderItems
         orderItemRepository.deleteAllByOrderId(savedOrder.getId());
         List<OrderItem> savedItems = new ArrayList<>();
         for (OrderItem item : newItems) {
@@ -258,29 +271,44 @@ public class OrderService {
             savedItems.add(orderItemRepository.save(item));
         }
 
-        // Update debt record
-        BigDecimal newOriginalAmount = totalAmount.subtract(paidImmediately);
-        List<Debt> debts = debtRepository.findAllByOrderId(savedOrder.getId());
-        if (!debts.isEmpty()) {
-            Debt debt = debts.get(0);
-            debt.setOriginalAmount(newOriginalAmount);
-            debt.setRemainingAmount(newOriginalAmount);
-            debtRepository.save(debt);
-        } else if (newOriginalAmount.compareTo(BigDecimal.ZERO) > 0) {
-            Debt debt = Debt.builder()
-                    .customer(customer).order(savedOrder)
-                    .originalAmount(newOriginalAmount).remainingAmount(newOriginalAmount).build();
-            Debt savedDebt = debtRepository.save(debt);
-            savedDebt.setCode(String.format("CN%07d", savedDebt.getId()));
-            debtRepository.save(savedDebt);
+        // Cập nhật Payment liên kết với đơn này
+        List<Payment> existingPayments = paymentRepository.findByOrderId(savedOrder.getId());
+        for (Payment p : existingPayments) {
+            paymentRepository.delete(p);
+        }
+        if (paidImmediately.compareTo(BigDecimal.ZERO) > 0) {
+            savePayment(customer, savedOrder, paidImmediately, orderDate,
+                    "Thanh toán ngay khi tạo đơn " + savedOrder.getCode());
         }
 
-        // Update customer has_debt flag
-        boolean hasDebt = newOriginalAmount.compareTo(BigDecimal.ZERO) > 0;
-        customer.setHasDebt(hasDebt);
-        customerRepository.save(customer);
-
+        updateCustomerDebtFlag(customer);
         return new OrderWithItems(savedOrder, savedItems);
+    }
+
+    private OrderWithItems updatePaymentOrder(Order order, Customer customer, LocalDate orderDate,
+                                               BigDecimal amount, String note) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidRequestException("Số tiền trả nợ phải lớn hơn 0");
+        }
+
+        order.setCustomer(customer);
+        order.setOrderType(OrderType.PAYMENT);
+        order.setOrderDate(orderDate);
+        order.setTotalAmount(amount);
+        order.setPaidImmediately(amount);
+        order.setNote(note);
+        Order savedOrder = orderRepository.save(order);
+
+        // Cập nhật Payment liên kết
+        List<Payment> existingPayments = paymentRepository.findByOrderId(savedOrder.getId());
+        for (Payment p : existingPayments) {
+            paymentRepository.delete(p);
+        }
+        savePayment(customer, savedOrder, amount, orderDate,
+                note != null ? note : "Trả nợ theo đơn " + savedOrder.getCode());
+
+        updateCustomerDebtFlag(customer);
+        return new OrderWithItems(savedOrder, Collections.emptyList());
     }
 
     // -------------------------------------------------------------------------
@@ -292,18 +320,20 @@ public class OrderService {
         Specification<Order> spec = (root, query, cb) -> {
             var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
 
-            // JOIN FETCH customer để tránh LazyInitializationException
             if (query != null && Long.class != query.getResultType()) {
                 root.fetch("customer", jakarta.persistence.criteria.JoinType.LEFT);
             }
 
-            // Filter by customerId
             Object customerId = request.getFilters().get("customerId");
             if (customerId != null) {
                 predicates.add(cb.equal(root.get("customer").get("id"), customerId));
             }
 
-            // Filter by date range
+            Object orderType = request.getFilters().get("orderType");
+            if (orderType != null) {
+                predicates.add(cb.equal(root.get("orderType"), orderType));
+            }
+
             Object from = request.getFilters().get("from");
             Object to = request.getFilters().get("to");
             if (from != null) {
@@ -313,9 +343,7 @@ public class OrderService {
                 predicates.add(cb.lessThanOrEqualTo(root.get("orderDate"), (java.time.LocalDate) to));
             }
 
-            // Only active orders
             predicates.add(cb.isTrue(root.get("active")));
-
             return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
         };
 
@@ -326,9 +354,6 @@ public class OrderService {
     // getOrders
     // -------------------------------------------------------------------------
 
-    /**
-     * Returns orders filtered by optional customerId and/or date range.
-     */
     @Transactional(readOnly = true)
     public List<Order> getOrders(Long customerId, LocalDate from, LocalDate to) {
         if (customerId != null && from != null && to != null) {
@@ -346,14 +371,13 @@ public class OrderService {
     // getOrderById
     // -------------------------------------------------------------------------
 
-    /**
-     * Returns an order with its items. Throws 404 if not found.
-     */
     @Transactional(readOnly = true)
     public OrderWithItems getOrderById(Long id) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy đơn hàng với mã: " + id));
-        List<OrderItem> items = orderItemRepository.findAllByOrderId(id);
+        List<OrderItem> items = order.getOrderType() == OrderType.SALE
+                ? orderItemRepository.findAllByOrderId(id)
+                : Collections.emptyList();
         return new OrderWithItems(order, items);
     }
 
@@ -361,9 +385,6 @@ public class OrderService {
     // updateOrderNote
     // -------------------------------------------------------------------------
 
-    /**
-     * Updates the note field of an order. Throws 404 if not found.
-     */
     @Transactional
     public Order updateOrderNote(Long id, String note) {
         Order order = orderRepository.findById(id)
@@ -376,27 +397,56 @@ public class OrderService {
     // deleteOrder
     // -------------------------------------------------------------------------
 
-    /**
-     * Soft-deletes an order by setting active = false. Throws 404 if not found.
-     */
     @Transactional
     public void deleteOrder(Long id) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy đơn hàng với mã: " + id));
         order.setActive(false);
         orderRepository.save(order);
+
+        // Cập nhật lại has_debt sau khi xóa đơn
+        updateCustomerDebtFlag(order.getCustomer());
     }
 
     // -------------------------------------------------------------------------
-    // Helper
+    // Tính công nợ
     // -------------------------------------------------------------------------
 
     /**
-     * Computes the effective quantity based on the product's unit:
-     * - M2  : count × length × width
-     * - MET : count × length
-     * - Others: count
+     * Tổng công nợ của khách hàng:
+     * = Σ(SALE.total_amount) - Σ(Payment.amount)
      */
+    @Transactional(readOnly = true)
+    public BigDecimal calculateCustomerDebt(Long customerId) {
+        BigDecimal totalSale = orderRepository.sumSaleTotalAmountByCustomerId(customerId);
+        BigDecimal totalPaid = paymentRepository.sumAmountByCustomerId(customerId);
+        return totalSale.subtract(totalPaid);
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    private void savePayment(Customer customer, Order order, BigDecimal amount,
+                              LocalDate paymentDate, String note) {
+        Payment payment = Payment.builder()
+                .customer(customer)
+                .order(order)
+                .amount(amount)
+                .paymentDate(paymentDate)
+                .note(note)
+                .build();
+        Payment saved = paymentRepository.save(payment);
+        saved.setCode(String.format("TT%07d", saved.getId()));
+        paymentRepository.save(saved);
+    }
+
+    private void updateCustomerDebtFlag(Customer customer) {
+        BigDecimal totalDebt = calculateCustomerDebt(customer.getId());
+        customer.setHasDebt(totalDebt.compareTo(BigDecimal.ZERO) > 0);
+        customerRepository.save(customer);
+    }
+
     private BigDecimal computeQuantity(ProductUnit unit, BigDecimal count, BigDecimal length, BigDecimal width) {
         return switch (unit) {
             case M2 -> count.multiply(length).multiply(width);

@@ -15,20 +15,28 @@ import java.util.List;
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, Long>, JpaSpecificationExecutor<Payment> {
 
-    @EntityGraph(attributePaths = {"customer"})
+    @EntityGraph(attributePaths = {"customer", "order"})
     List<Payment> findByCustomerIdOrderByCreatedAtDesc(Long customerId);
 
-    @EntityGraph(attributePaths = {"customer"})
+    @EntityGraph(attributePaths = {"customer", "order"})
     List<Payment> findByPaymentDateBetween(LocalDate from, LocalDate to);
 
-    @EntityGraph(attributePaths = {"customer"})
+    @EntityGraph(attributePaths = {"customer", "order"})
     List<Payment> findByCustomerIdAndPaymentDateBetween(Long customerId, LocalDate from, LocalDate to);
 
-    @EntityGraph(attributePaths = {"customer"})
+    @EntityGraph(attributePaths = {"customer", "order"})
     List<Payment> findAll();
 
+    List<Payment> findByOrderId(Long orderId);
+
     /**
-     * Sum payment amounts whose payment_date falls within the given range.
+     * Tổng tiền đã thanh toán của một khách hàng.
+     */
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.customer.id = :customerId")
+    BigDecimal sumAmountByCustomerId(@Param("customerId") Long customerId);
+
+    /**
+     * Tổng tiền thanh toán trong khoảng thời gian (dùng cho statistics).
      */
     @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.paymentDate BETWEEN :from AND :to")
     BigDecimal sumAmountBetween(@Param("from") LocalDate from, @Param("to") LocalDate to);

@@ -35,6 +35,15 @@ public class Payment {
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
 
+    /**
+     * Liên kết tới đơn hàng tạo ra payment này.
+     * - SALE order: payment từ paid_immediately
+     * - PAYMENT order: payment từ toàn bộ đơn trả nợ
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id", nullable = true)
+    private Order order;
+
     @Column(name = "amount", nullable = false, precision = 15, scale = 2)
     private BigDecimal amount;
 

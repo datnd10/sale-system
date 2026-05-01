@@ -1,57 +1,51 @@
 package datnd.vn.salesystem.controller;
 
 import datnd.vn.salesystem.common.ApiResponse;
-import datnd.vn.salesystem.common.PageResponse;
 import datnd.vn.salesystem.constant.Constants;
-import datnd.vn.salesystem.dto.response.CustomerDebtDetailResponse;
-import datnd.vn.salesystem.dto.response.DebtSummaryResponse;
-import datnd.vn.salesystem.service.DebtService;
+import datnd.vn.salesystem.dto.response.CustomerResponse;
+import datnd.vn.salesystem.dto.response.DebtStatsResponse;
+import datnd.vn.salesystem.service.CustomerService;
+import datnd.vn.salesystem.service.StatisticsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Tag(name = "Debt", description = "Quản lý công nợ khách hàng")
+@Tag(name = "Debt", description = "Xem công nợ khách hàng")
 @RestController
 @RequestMapping(Constants.URI.DEBT)
 @RequiredArgsConstructor
 public class DebtController {
 
-    private final DebtService debtService;
+    private final StatisticsService statisticsService;
+    private final CustomerService customerService;
 
-    @Operation(summary = "Tìm kiếm công nợ có phân trang")
-    @GetMapping("/search")
-    public ApiResponse<PageResponse<DebtSummaryResponse>> searchDebts(
-            @Parameter(description = "Tên khách hàng (tìm kiếm gần đúng)") @RequestParam(required = false) String customerName,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "totalRemaining") String sort,
-            @RequestParam(defaultValue = "DESC") Sort.Direction direction) {
-        return ApiResponse.success(
-                debtService.searchDebts(customerName, page, size, sort, direction),
-                "Customer debts retrieved successfully");
-    }
-
-    @Operation(summary = "Lấy danh sách công nợ tất cả khách hàng")
+    @Operation(
+            summary = "Danh sách khách hàng còn nợ",
+            description = "Trả về tất cả khách hàng có công nợ > 0, sắp xếp giảm dần theo số nợ. " +
+                    "Công nợ = Σ(SALE.total_amount) - Σ(Payment.amount)"
+    )
     @GetMapping
-    public ApiResponse<List<DebtSummaryResponse>> getAllCustomerDebts() {
-        List<DebtSummaryResponse> result = debtService.getAllCustomerDebts()
-                .stream()
-                .map(DebtSummaryResponse::from)
-                .toList();
-        return ApiResponse.success(result, "Customer debts retrieved successfully");
+    public ApiResponse<List<DebtStatsResponse>> getAllCustomerDebts() {
+        return ApiResponse.success(
+                statisticsService.getDebtStats(),
+                "Customer debts retrieved successfully"
+        );
     }
 
-    @Operation(summary = "Lấy chi tiết công nợ của một khách hàng")
+    @Operation(
+            summary = "Công nợ chi tiết của một khách hàng",
+            description = "Trả về tổng công nợ hiện tại của khách hàng."
+    )
     @GetMapping("/customer/{customerId:\\d+}")
-    public ApiResponse<CustomerDebtDetailResponse> getCustomerDebtDetail(
+    public ApiResponse<CustomerResponse> getCustomerDebt(
             @Parameter(description = "ID khách hàng") @PathVariable Long customerId) {
         return ApiResponse.success(
-                CustomerDebtDetailResponse.from(debtService.getCustomerDebtDetail(customerId)),
-                "Customer debt detail retrieved successfully");
+                customerService.getCustomerWithDebtInfo(customerId),
+                "Customer debt retrieved successfully"
+        );
     }
 }

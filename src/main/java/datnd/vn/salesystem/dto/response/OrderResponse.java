@@ -1,5 +1,6 @@
 package datnd.vn.salesystem.dto.response;
 
+import datnd.vn.salesystem.constant.enums.OrderType;
 import datnd.vn.salesystem.entity.Order;
 import lombok.Builder;
 import lombok.Data;
@@ -16,6 +17,7 @@ public class OrderResponse {
     private String code;
     private Long customerId;
     private String customerName;
+    private OrderType orderType;
     private LocalDate orderDate;
     private BigDecimal totalAmount;
     private BigDecimal paidImmediately;
@@ -30,6 +32,7 @@ public class OrderResponse {
                 .code(order.getCode())
                 .customerId(order.getCustomer().getId())
                 .customerName(order.getCustomer().getName())
+                .orderType(order.getOrderType())
                 .orderDate(order.getOrderDate())
                 .totalAmount(order.getTotalAmount())
                 .paidImmediately(order.getPaidImmediately())

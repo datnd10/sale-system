@@ -4,7 +4,6 @@ import datnd.vn.salesystem.dto.response.DebtStatsResponse;
 import datnd.vn.salesystem.dto.response.MonthlyRevenueResponse;
 import datnd.vn.salesystem.dto.response.RevenueStatsResponse;
 import datnd.vn.salesystem.exception.InvalidRequestException;
-import datnd.vn.salesystem.repository.DebtRepository;
 import datnd.vn.salesystem.repository.OrderRepository;
 import datnd.vn.salesystem.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,37 +21,21 @@ public class StatisticsService {
 
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
-    private final DebtRepository debtRepository;
-
-    // -------------------------------------------------------------------------
-    // getRevenueStats
-    // -------------------------------------------------------------------------
 
     /**
-     * Returns revenue statistics for the given date range.
-     *
-     * - total_orders: count of active orders whose order_date is in [from, to]
-     * - total_revenue: sum of total_amount of those orders
-     * - total_collected: sum of paid_immediately from those orders
-     *                  + sum of payment amounts whose payment_date is in [from, to]
-     * - total_debt: total_revenue - total_collected
-     *
-     * Throws InvalidRequestException (400) if from > to.
-     *
-     * Requirements: 7.1, 7.4
+     * Thống kê doanh thu theo khoảng thời gian.
+     * Chỉ tính đơn SALE active.
+     * total_collected = Σ(Payment.amount trong khoảng thời gian)
      */
     @Transactional(readOnly = true)
     public RevenueStatsResponse getRevenueStats(LocalDate from, LocalDate to) {
         if (from.isAfter(to)) {
-            throw new InvalidRequestException("Start date must not be after end date");
+            throw new InvalidRequestException("Ngày bắt đầu không được sau ngày kết thúc");
         }
 
-        long totalOrders = orderRepository.countActiveOrdersBetween(from, to);
-        BigDecimal totalRevenue = orderRepository.sumTotalAmountBetween(from, to);
-        BigDecimal paidImmediately = orderRepository.sumPaidImmediatelyBetween(from, to);
-        BigDecimal paymentsInRange = paymentRepository.sumAmountBetween(from, to);
-
-        BigDecimal totalCollected = paidImmediately.add(paymentsInRange);
+        long totalOrders = orderRepository.countActiveSaleOrdersBetween(from, to);
+        BigDecimal totalRevenue = orderRepository.sumSaleTotalAmountBetween(from, to);
+        BigDecimal totalCollected = paymentRepository.sumAmountBetween(from, to);
         BigDecimal totalDebt = totalRevenue.subtract(totalCollected);
 
         return RevenueStatsResponse.builder()
@@ -63,18 +46,13 @@ public class StatisticsService {
                 .build();
     }
 
-    // -------------------------------------------------------------------------
-    // getDebtStats
-    // -------------------------------------------------------------------------
-
     /**
-     * Returns a list of customers with remaining_debt > 0, sorted descending by remaining debt.
-     *
-     * Requirements: 7.2
+     * Danh sách khách hàng có công nợ > 0, sắp xếp giảm dần.
+     * Công nợ = Σ(SALE.total_amount) - Σ(Payment.amount)
      */
     @Transactional(readOnly = true)
     public List<DebtStatsResponse> getDebtStats() {
-        List<Object[]> rows = debtRepository.findCustomerDebtSummariesDescending();
+        List<Object[]> rows = orderRepository.findCustomerDebtSummariesDescending();
 
         List<DebtStatsResponse> result = new ArrayList<>(rows.size());
         for (Object[] row : rows) {
@@ -88,22 +66,15 @@ public class StatisticsService {
         return result;
     }
 
-    // -------------------------------------------------------------------------
-    // getMonthlyRevenue
-    // -------------------------------------------------------------------------
-
     /**
-     * Returns an array of 12 BigDecimal values representing total revenue per month
-     * for the given year. Index 0 = January, index 11 = December.
-     *
-     * Requirements: 7.3
+     * Doanh thu theo tháng trong năm (chỉ đơn SALE).
+     * Trả về mảng 12 phần tử, index 0 = tháng 1.
      */
     @Transactional(readOnly = true)
     public MonthlyRevenueResponse getMonthlyRevenue(int year) {
         List<BigDecimal> monthly = new ArrayList<>(12);
         for (int month = 1; month <= 12; month++) {
-            BigDecimal revenue = orderRepository.sumTotalAmountByYearAndMonth(year, month);
-            monthly.add(revenue);
+            monthly.add(orderRepository.sumSaleTotalAmountByYearAndMonth(year, month));
         }
         return MonthlyRevenueResponse.builder()
                 .year(year)

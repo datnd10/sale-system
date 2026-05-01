@@ -16,6 +16,8 @@ public class PaymentResponse {
     private String code;
     private Long customerId;
     private String customerName;
+    private Long orderId;
+    private String orderCode;
     private BigDecimal amount;
     private LocalDate paymentDate;
     private String note;
@@ -27,6 +29,8 @@ public class PaymentResponse {
                 .code(payment.getCode())
                 .customerId(payment.getCustomer().getId())
                 .customerName(payment.getCustomer().getName())
+                .orderId(payment.getOrder() != null ? payment.getOrder().getId() : null)
+                .orderCode(payment.getOrder() != null ? payment.getOrder().getCode() : null)
                 .amount(payment.getAmount())
                 .paymentDate(payment.getPaymentDate())
                 .note(payment.getNote())
